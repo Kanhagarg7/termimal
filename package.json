@@ -7,7 +7,7 @@
     "start": "node server.js"
   },
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   },
   "dependencies": {
     "dotenv": "^16.0.0",
@@ -15,7 +15,7 @@
     "pg": "^8.10.0",
     "socket.io": "^4.7.2",
     "child_process": "^1.0.2",
-    "node-pty": "^1.1.0",
+    "node-pty": "^1.0.5",
     "cors": "^2.8.5"
   }
 }
