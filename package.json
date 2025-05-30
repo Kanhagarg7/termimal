@@ -15,7 +15,7 @@
     "pg": "^8.10.0",
     "socket.io": "^4.7.2",
     "child_process": "^1.0.2",
-    "node-pty": "^1.0.5",
+    "@homebridge/node-pty-prebuilt-multiarch": "^0.12.0",
     "cors": "^2.8.5"
   }
 }
