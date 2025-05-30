@@ -2,7 +2,7 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const pty = require('node-pty');
+const pty = require('@homebridge/node-pty-prebuilt-multiarch');
 const { Pool } = require('pg');
 const bodyParser = require('body-parser');
 
@@ -12,11 +12,7 @@ const io = new Server(server);
 
 // PostgreSQL (CockroachDB-compatible) config
 const pool = new Pool({
-  user: 'your_user',
-  host: 'your_host',
-  database: 'your_database',
-  password: 'your_password',
-  port: 26257,
+  connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
