@@ -4,7 +4,7 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const pty = require('node-pty');
+const pty = require('@homebridge/node-pty-prebuilt-multiarch');
 const pool = require('./db');
 
 const app = express();
