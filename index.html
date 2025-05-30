@@ -1,122 +1,72 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Termux Web</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Termux-like Web Terminal</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm/css/xterm.css"/>
   <style>
-    html, body {
+    body, html {
       margin: 0;
       padding: 0;
+      background: black;
       height: 100%;
-      background-color: black;
-      color: white;
-      font-family: monospace;
-      font-size: 14px;
       overflow: hidden;
     }
     #terminal {
-      white-space: pre-wrap;
-      padding: 10px;
-      overflow-y: auto;
-      height: calc(100% - 60px);
-    }
-    #inputLine {
-      display: flex;
-      padding: 10px;
-      background: black;
-      border-top: 1px solid #333;
-    }
-    #prompt {
-      flex-shrink: 0;
-    }
-    #cmdInput {
-      flex-grow: 1;
-      background: black;
-      border: none;
-      outline: none;
-      color: white;
-      font-family: monospace;
-      font-size: 14px;
-      caret-color: white;
-    }
-    #keys {
-      display: none;
-      flex-wrap: wrap;
-      justify-content: space-around;
-      padding: 4px;
-      background: #111;
-      position: fixed;
-      bottom: 0;
+      height: calc(100% - 40px);
       width: 100%;
-      z-index: 100;
     }
-    .key {
-      padding: 6px 8px;
-      background: #222;
-      margin: 2px;
-      border-radius: 4px;
-      color: #ccc;
-      font-size: 12px;
-      user-select: none;
-    }
-    #container {
-      height: 100%;
+    #controls {
+      height: 40px;
+      background: #111;
       display: flex;
-      flex-direction: column;
+      justify-content: space-around;
+      align-items: center;
+    }
+    #controls button {
+      color: white;
+      background: #222;
+      border: none;
+      padding: 5px 10px;
+      border-radius: 4px;
     }
   </style>
 </head>
 <body>
-  <div id="container" onclick="focusInput()">
-    <div id="terminal">Welcome to Termux Web\n</div>
-    <div id="inputLine">
-      <div id="prompt">$&nbsp;</div>
-      <input id="cmdInput" autocomplete="off" />
-    </div>
+  <div id="terminal"></div>
+  <div id="controls">
+    <button onclick="sendCtrl()">Ctrl</button>
+    <button onclick="sendArrow('A')">↑</button>
+    <button onclick="sendArrow('B')">↓</button>
+    <button onclick="sendArrow('C')">→</button>
+    <button onclick="sendArrow('D')">←</button>
   </div>
-  <div id="keys">
-    <div class="key" onclick="sendKey('ESC')">ESC</div>
-    <div class="key" onclick="sendKey('TAB')">TAB</div>
-    <div class="key" onclick="sendKey('CTRL')">CTRL</div>
-    <div class="key" onclick="sendKey('↑')">↑</div>
-    <div class="key" onclick="sendKey('↓')">↓</div>
-    <div class="key" onclick="sendKey('←')">←</div>
-    <div class="key" onclick="sendKey('→')">→</div>
-  </div>
-  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"></script>
   <script>
-    const terminal = document.getElementById("terminal");
-    const input = document.getElementById("cmdInput");
-    const keys = document.getElementById("keys");
-    const socket = io();
-    input.addEventListener("focus", () => { keys.style.display = "flex"; });
-    input.addEventListener("blur", () => {
-      setTimeout(() => { keys.style.display = "none"; }, 200);
-    });
-    input.addEventListener("keydown", e => {
-      if (e.key === "Enter") {
-        const cmd = input.value;
-        appendToTerminal(`$ ${cmd}\n`);
-        socket.emit("command", cmd);
-        input.value = "";
-      }
-    });
-    socket.on("output", data => { appendToTerminal(data); });
-    function appendToTerminal(text) {
-      terminal.textContent += text;
-      terminal.scrollTop = terminal.scrollHeight;
+    const term = new Terminal();
+    term.open(document.getElementById("terminal"));
+
+    const socket = new WebSocket(`ws://${location.host}`);
+    socket.onmessage = (e) => term.write(e.data);
+    term.onData(data => socket.send(data));
+
+    async function loadLogs() {
+      const res = await fetch("/logs");
+      const logs = await res.json();
+      logs.forEach(log => {
+        if (log.output) term.write(log.output);
+      });
     }
-    function sendKey(k) {
-      const keys = {
-        ESC: "\x1b", TAB: "\t", CTRL: "^",
-        "↑": "\x1b[A", "↓": "\x1b[B",
-        "←": "\x1b[D", "→": "\x1b[C"
-      };
-      input.value += keys[k] || k;
-      input.focus();
+    loadLogs();
+
+    function sendCtrl() {
+      socket.send(String.fromCharCode(3)); // Ctrl+C
     }
-    function focusInput() { input.focus(); }
+    function sendArrow(dir) {
+      socket.send(`\x1b[${dir}`);
+    }
   </script>
 </body>
 </html>
