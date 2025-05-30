@@ -1,72 +1,81 @@
 
+<!-- index.html - Termux-style terminal frontend -->
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Termux-like Web Terminal</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm/css/xterm.css"/>
-  <style>
-    body, html {
-      margin: 0;
-      padding: 0;
-      background: black;
-      height: 100%;
-      overflow: hidden;
-    }
-    #terminal {
-      height: calc(100% - 40px);
-      width: 100%;
-    }
-    #controls {
-      height: 40px;
-      background: #111;
-      display: flex;
-      justify-content: space-around;
-      align-items: center;
-    }
-    #controls button {
-      color: white;
-      background: #222;
-      border: none;
-      padding: 5px 10px;
-      border-radius: 4px;
-    }
-  </style>
+    <title>Termux Web Terminal</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm/css/xterm.css" />
+    <style>
+        html, body {
+            margin: 0; padding: 0;
+            height: 100%; width: 100%;
+            background-color: black;
+        }
+        #terminal {
+            height: 100%;
+        }
+        #keyboard {
+            display: none;
+            background: #333;
+            color: white;
+            padding: 5px;
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            text-align: center;
+        }
+        .key-btn {
+            margin: 3px;
+            padding: 5px 10px;
+            background: #555;
+            border: none;
+            color: white;
+            font-weight: bold;
+        }
+    </style>
 </head>
 <body>
-  <div id="terminal"></div>
-  <div id="controls">
-    <button onclick="sendCtrl()">Ctrl</button>
-    <button onclick="sendArrow('A')">↑</button>
-    <button onclick="sendArrow('B')">↓</button>
-    <button onclick="sendArrow('C')">→</button>
-    <button onclick="sendArrow('D')">←</button>
-  </div>
-  <script src="https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"></script>
-  <script>
-    const term = new Terminal();
-    term.open(document.getElementById("terminal"));
+    <div id="terminal"></div>
+    <div id="keyboard">
+        <button class="key-btn" data-key="Ctrl">Ctrl</button>
+        <button class="key-btn" data-key="ArrowUp">↑</button>
+        <button class="key-btn" data-key="ArrowDown">↓</button>
+        <button class="key-btn" data-key="ArrowLeft">←</button>
+        <button class="key-btn" data-key="ArrowRight">→</button>
+    </div>
 
-    const socket = new WebSocket(`ws://${location.host}`);
-    socket.onmessage = (e) => term.write(e.data);
-    term.onData(data => socket.send(data));
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"></script>
+    <script>
+        const socket = io();
+        const term = new Terminal();
+        term.open(document.getElementById('terminal'));
+        term.focus();
 
-    async function loadLogs() {
-      const res = await fetch("/logs");
-      const logs = await res.json();
-      logs.forEach(log => {
-        if (log.output) term.write(log.output);
-      });
-    }
-    loadLogs();
+        socket.on('output', data => term.write(data));
 
-    function sendCtrl() {
-      socket.send(String.fromCharCode(3)); // Ctrl+C
-    }
-    function sendArrow(dir) {
-      socket.send(`\x1b[${dir}`);
-    }
-  </script>
+        term.onData(data => {
+            socket.emit('input', data);
+        });
+
+        // Show/hide keyboard on tap
+        let keyboardVisible = false;
+        document.getElementById('terminal').addEventListener('click', () => {
+            keyboardVisible = !keyboardVisible;
+            document.getElementById('keyboard').style.display = keyboardVisible ? 'block' : 'none';
+        });
+
+        // Virtual key press handling
+        document.querySelectorAll('.key-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const key = btn.getAttribute('data-key');
+                if (key === 'Ctrl') {
+                    socket.emit('input', ''); // Ctrl+C
+                } else {
+                    socket.emit('input', key);
+                }
+            });
+        });
+    </script>
 </body>
 </html>

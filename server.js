@@ -1,54 +1,47 @@
 
-const express = require("express");
-const http = require("http");
-const WebSocket = require("ws");
-const pty = require("node-pty");
-const { Pool } = require("pg");
-const dotenv = require("dotenv");
-const cors = require("cors");
+// server.js - Termux-style real-time terminal backend
 
-dotenv.config();
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const pty = require('node-pty');
+const pool = require('./db');
+
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+const io = new Server(server);
 
-app.use(cors());
-app.use(express.static("public"));
+app.use(express.static('public'));
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-});
+io.on('connection', socket => {
+    const shell = process.platform === 'win32' ? 'powershell.exe' : 'bash';
+    const ptyProcess = pty.spawn(shell, [], {
+        name: 'xterm-color',
+        cols: 80,
+        rows: 30,
+        cwd: process.env.HOME,
+        env: process.env
+    });
 
-wss.on("connection", function (ws) {
-  const shell = pty.spawn("bash", [], {
-    name: "xterm-color",
-    cols: 80,
-    rows: 30,
-    cwd: process.env.HOME,
-    env: process.env,
-  });
+    ptyProcess.on('data', async data => {
+        socket.emit('output', data);
+        await pool.query('INSERT INTO terminal_logs (type, content) VALUES ($1, $2)', ['output', data]);
+    });
 
-  shell.onData(async function (data) {
-    ws.send(data);
-    await pool.query("INSERT INTO logs (output, created_at) VALUES ($1, NOW())", [data]);
-  });
+    socket.on('input', async input => {
+        ptyProcess.write(input);
+        await pool.query('INSERT INTO terminal_logs (type, content) VALUES ($1, $2)', ['input', input]);
+    });
 
-  ws.on("message", async function (msg) {
-    shell.write(msg);
-    await pool.query("INSERT INTO logs (command, created_at) VALUES ($1, NOW())", [msg]);
-  });
+    socket.on('resize', ({ cols, rows }) => {
+        ptyProcess.resize(cols, rows);
+    });
 
-  ws.on("close", () => {
-    shell.kill();
-  });
-});
-
-app.get("/logs", async (req, res) => {
-  const result = await pool.query("SELECT * FROM logs ORDER BY created_at ASC");
-  res.json(result.rows);
+    socket.on('disconnect', () => {
+        ptyProcess.kill();
+    });
 });
 
 server.listen(process.env.PORT || 3000, () => {
-  console.log("Server started on port 3000");
+    console.log('Server running on port 3000');
 });
