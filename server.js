@@ -1,47 +1,75 @@
 
-// server.js - Termux-style real-time terminal backend
-
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const pty = require('@homebridge/node-pty-prebuilt-multiarch');
-const pool = require('./db');
+const pty = require('node-pty');
+const { Pool } = require('pg');
+const bodyParser = require('body-parser');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+// PostgreSQL (CockroachDB-compatible) config
+const pool = new Pool({
+  user: 'your_user',
+  host: 'your_host',
+  database: 'your_database',
+  password: 'your_password',
+  port: 26257,
+  ssl: { rejectUnauthorized: false }
+});
+
+app.use(bodyParser.json());
 app.use(express.static('public'));
 
-io.on('connection', socket => {
-    const shell = process.platform === 'win32' ? 'powershell.exe' : 'bash';
-    const ptyProcess = pty.spawn(shell, [], {
-        name: 'xterm-color',
-        cols: 80,
-        rows: 30,
-        cwd: process.env.HOME,
-        env: process.env
-    });
+io.on('connection', (socket) => {
+  const shell = process.env.SHELL || 'bash';
+  const ptyProcess = pty.spawn(shell, [], {
+    name: 'xterm-color',
+    cols: 80,
+    rows: 30,
+    cwd: process.env.HOME,
+    env: process.env
+  });
 
-    ptyProcess.on('data', async data => {
-        socket.emit('output', data);
-        await pool.query('INSERT INTO terminal_logs (type, content) VALUES ($1, $2)', ['output', data]);
-    });
+  ptyProcess.on('data', async (data) => {
+    socket.emit('output', data);
+    try {
+      await pool.query(
+        'INSERT INTO terminal_logs (session_id, output) VALUES ($1, $2)',
+        [socket.id, data]
+      );
+    } catch (err) {
+      console.error('DB insert error:', err);
+    }
+  });
 
-    socket.on('input', async input => {
-        ptyProcess.write(input);
-        await pool.query('INSERT INTO terminal_logs (type, content) VALUES ($1, $2)', ['input', input]);
-    });
+  socket.on('input', async (input) => {
+    ptyProcess.write(input);
+    try {
+      await pool.query(
+        'INSERT INTO terminal_logs (session_id, input) VALUES ($1, $2)',
+        [socket.id, input]
+      );
+    } catch (err) {
+      console.error('DB insert error:', err);
+    }
+  });
 
-    socket.on('resize', ({ cols, rows }) => {
-        ptyProcess.resize(cols, rows);
-    });
+  socket.on('resize', (size) => {
+    ptyProcess.resize(size.cols, size.rows);
+  });
 
-    socket.on('disconnect', () => {
-        ptyProcess.kill();
-    });
+  socket.on('disconnect', () => {
+    ptyProcess.kill();
+  });
+});
+
+app.get('/', (req, res) => {
+  res.sendFile(__dirname + '/public/index.html');
 });
 
 server.listen(process.env.PORT || 3000, () => {
-    console.log('Server running on port 3000');
+  console.log('Server started');
 });
